@@ -36,22 +36,83 @@ Enter when prompted:
 
 ### 3. Add to Claude Code
 
-Add the plugin to your Claude Code configuration. Sessions will sync automatically.
+**Option A: Use the setup command (recommended)**
+
+```bash
+claude-code-sync setup
+```
+
+This automatically configures the hooks in `~/.claude/settings.json`.
+
+**Option B: One-liner (copy and paste)**
+
+```bash
+mkdir -p ~/.claude && cat > ~/.claude/settings.json << 'EOF'
+{
+  "hooks": {
+    "SessionStart": [{ "hooks": [{ "type": "command", "command": "claude-code-sync hook SessionStart" }] }],
+    "SessionEnd": [{ "hooks": [{ "type": "command", "command": "claude-code-sync hook SessionEnd" }] }],
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "claude-code-sync hook UserPromptSubmit" }] }],
+    "PostToolUse": [{ "matcher": "*", "hooks": [{ "type": "command", "command": "claude-code-sync hook PostToolUse" }] }],
+    "Stop": [{ "matcher": "*", "hooks": [{ "type": "command", "command": "claude-code-sync hook Stop" }] }]
+  }
+}
+EOF
+```
+
+### 4. Verify Setup
+
+```bash
+claude-code-sync verify
+```
+
+You should see:
+
+```
+  OpenSync Setup Verification
+
+Credentials: OK
+   Convex URL: https://your-project.convex.cloud
+   API Key: osk_****...****
+
+Claude Code Config: OK
+   Config file: ~/.claude/settings.json
+   Hooks registered: claude-code-sync
+
+Ready! Start Claude Code and sessions will sync automatically.
+```
+
+Sessions will now sync automatically when you use Claude Code.
 
 ## CLI Commands
 
 | Command | Description |
 |---------|-------------|
 | `claude-code-sync login` | Configure Convex URL and API Key |
+| `claude-code-sync setup` | Add hooks to Claude Code settings |
+| `claude-code-sync verify` | Verify credentials and Claude Code config |
 | `claude-code-sync logout` | Clear stored credentials |
 | `claude-code-sync status` | Show connection status |
 | `claude-code-sync config` | Show current configuration |
 | `claude-code-sync config --json` | Show config as JSON |
 | `claude-code-sync set <key> <value>` | Update a config value |
+| `claude-code-sync hook <event>` | Handle Claude Code hook events (internal) |
 | `claude-code-sync --version` | Show version number |
 | `claude-code-sync --help` | Show help |
 
 See [full command reference](docs/commands.md) for detailed usage, troubleshooting, and examples.
+
+## Hook Events
+
+The plugin captures these Claude Code events:
+
+| Event | Description |
+|-------|-------------|
+| `SessionStart` | Fires when a coding session begins |
+| `SessionEnd` | Fires when a session terminates |
+| `UserPromptSubmit` | Fires when you submit a prompt |
+| `PostToolUse` | Fires after each tool execution |
+| `Stop` | Fires when Claude finishes responding |
 
 ### Configuration Options
 
@@ -117,6 +178,13 @@ claude-code-sync login
 
 See [troubleshooting guide](docs/commands.md#troubleshooting) for more solutions.
 
+### Need Help?
+
+If you run into issues or have questions:
+
+- **Report a bug or request a feature:** [GitHub Issues](https://github.com/waynesutton/claude-code-sync/issues)
+- Check existing issues for solutions to common problems
+
 ## Requirements
 
 - Node.js 18 or later
@@ -126,6 +194,7 @@ See [troubleshooting guide](docs/commands.md#troubleshooting) for more solutions
 ## Links
 
 - [claude-code-sync Repository](https://github.com/waynesutton/claude-code-sync)
+- [Issues and Support](https://github.com/waynesutton/claude-code-sync/issues)
 - [OpenSync Backend](https://github.com/waynesutton/opensync)
 - [OpenSync Dashboard](https://opensyncsessions.netlify.app)
 - [npm Package](https://www.npmjs.com/package/claude-code-sync)

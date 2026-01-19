@@ -201,14 +201,18 @@ function normalizeConvexUrl(url: string): string {
 
 export class SyncClient {
   private config: Config;
+  private siteUrl: string;
   private sessionCache: Map<string, Partial<SessionData>> = new Map();
 
   constructor(config: Config) {
     this.config = config;
+    // Normalize URL to .convex.site for HTTP endpoints
+    // Supports both .convex.cloud and .convex.site input URLs
+    this.siteUrl = config.convexUrl.replace(".convex.cloud", ".convex.site");
   }
 
   private async request(endpoint: string, data: unknown): Promise<unknown> {
-    const url = `${this.config.convexUrl}${endpoint}`;
+    const url = `${this.siteUrl}${endpoint}`;
 
     const response = await fetch(url, {
       method: "POST",
@@ -256,7 +260,7 @@ export class SyncClient {
 
   async testConnection(): Promise<boolean> {
     try {
-      const url = `${this.config.convexUrl}/health`;
+      const url = `${this.siteUrl}/health`;
       const response = await fetch(url);
       return response.ok;
     } catch {
