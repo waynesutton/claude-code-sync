@@ -1,6 +1,6 @@
 {
   "name": "claude-code-sync",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Sync your Claude Code sessions to OpenSync dashboard. Track coding sessions, analyze tool usage, and monitor token consumption across projects.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

@@ -113,7 +113,7 @@ program
   .description("Configure Convex URL and API Key")
   .action(async () => {
     console.log("\n  Claude Code Sync - Login\n");
-    console.log("Get your API key from your OpenSync dashboard:");
+    console.log("Get your API key from your OpenSync.dev Settings page, starts with osk_. Enter it here:");
     console.log("  1. Go to Settings");
     console.log("  2. Click 'Generate API Key'");
     console.log("  3. Copy the key (starts with osk_)\n");
