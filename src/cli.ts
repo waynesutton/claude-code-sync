@@ -25,7 +25,7 @@ const program = new Command();
 program
   .name("claude-code-sync")
   .description("Sync Claude Code sessions to OpenSync dashboard")
-  .version("0.1.0");
+  .version("0.1.1");
 
 // ============================================================================
 // Helper Functions
@@ -160,7 +160,7 @@ program
   .command("config")
   .description("Show current configuration")
   .option("--json", "Output as JSON")
-  .action((options) => {
+  .action((options: { json?: boolean }) => {
     const config = loadConfig();
 
     if (!config) {
@@ -216,7 +216,15 @@ program
     }
 
     const boolValue = value === "true" || value === "1" || value === "yes";
-    (config as Record<string, unknown>)[key] = boolValue;
+    
+    // Type-safe config update
+    if (key === "autoSync") {
+      config.autoSync = boolValue;
+    } else if (key === "syncToolCalls") {
+      config.syncToolCalls = boolValue;
+    } else if (key === "syncThinking") {
+      config.syncThinking = boolValue;
+    }
 
     saveConfig(config);
     console.log(`✅ Set ${key} = ${boolValue}`);

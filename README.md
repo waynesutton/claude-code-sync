@@ -1,6 +1,13 @@
 # claude-code-sync
 
+[![npm version](https://img.shields.io/npm/v/claude-code-sync.svg)](https://www.npmjs.com/package/claude-code-sync)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+
 Sync your Claude Code sessions to [OpenSync](https://github.com/waynesutton/opensync) dashboard. Track coding sessions, analyze tool usage, and monitor token consumption across projects.
+
+**GitHub:** [github.com/waynesutton/claude-code-sync](https://github.com/waynesutton/claude-code-sync)
+
+**npm:** [npmjs.com/package/claude-code-sync](https://www.npmjs.com/package/claude-code-sync)
 
 ## Installation
 
@@ -39,7 +46,12 @@ Add the plugin to your Claude Code configuration. Sessions will sync automatical
 | `claude-code-sync logout` | Clear stored credentials |
 | `claude-code-sync status` | Show connection status |
 | `claude-code-sync config` | Show current configuration |
+| `claude-code-sync config --json` | Show config as JSON |
 | `claude-code-sync set <key> <value>` | Update a config value |
+| `claude-code-sync --version` | Show version number |
+| `claude-code-sync --help` | Show help |
+
+See [full command reference](docs/commands.md) for detailed usage, troubleshooting, and examples.
 
 ### Configuration Options
 
@@ -87,6 +99,24 @@ export CLAUDE_SYNC_THINKING="false"
 - Thinking traces are off by default
 - You control what gets synced via configuration
 
+## Troubleshooting
+
+```bash
+# Check status and connection
+claude-code-sync status
+
+# View current config
+claude-code-sync config --json
+
+# Full reset
+npm uninstall -g claude-code-sync
+rm -rf ~/.config/claude-code-sync
+npm install -g claude-code-sync
+claude-code-sync login
+```
+
+See [troubleshooting guide](docs/commands.md#troubleshooting) for more solutions.
+
 ## Requirements
 
 - Node.js 18 or later
@@ -95,11 +125,11 @@ export CLAUDE_SYNC_THINKING="false"
 
 ## Links
 
-- [OpenSync Repository](https://github.com/waynesutton/opensync)
+- [claude-code-sync Repository](https://github.com/waynesutton/claude-code-sync)
+- [OpenSync Backend](https://github.com/waynesutton/opensync)
 - [OpenSync Dashboard](https://opensyncsessions.netlify.app)
-- [OpenCode Sync Plugin](https://www.npmjs.com/package/opencode-sync-plugin)
+- [npm Package](https://www.npmjs.com/package/claude-code-sync)
 
 ## License
 
 MIT
-# claude-code-sync

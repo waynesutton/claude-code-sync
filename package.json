@@ -1,11 +1,11 @@
 {
   "name": "claude-code-sync",
-  "version": "0.1.0",
-  "description": "Sync your Claude Code sessions to OpenSync dashboard",
+  "version": "0.1.1",
+  "description": "Sync your Claude Code sessions to OpenSync dashboard. Track coding sessions, analyze tool usage, and monitor token consumption across projects.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "claude-code-sync": "./dist/cli.js"
+    "claude-code-sync": "dist/cli.js"
   },
   "scripts": {
     "build": "tsc",
@@ -34,8 +34,7 @@
   },
   "homepage": "https://github.com/waynesutton/claude-code-sync#readme",
   "dependencies": {
-    "commander": "^12.1.0",
-    "node-fetch": "^3.3.2"
+    "commander": "^12.1.0"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
@@ -46,6 +45,7 @@
   },
   "files": [
     "dist",
+    "docs",
     "README.md"
   ]
 }
