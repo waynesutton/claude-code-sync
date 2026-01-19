@@ -20,13 +20,54 @@ import {
   clearConfig,
   SyncClient,
   Config,
+  SessionData,
+  MessageData,
 } from "./index";
+
+// Types for Claude Code hook event data from stdin
+interface HookSessionStartData {
+  session_id: string;
+  cwd?: string;
+  permission_mode?: string;
+  source?: string;
+}
+
+interface HookSessionEndData {
+  session_id: string;
+  reason?: "user_stop" | "max_turns" | "error" | "completed";
+}
+
+interface HookUserPromptData {
+  session_id: string;
+  prompt: string;
+}
+
+interface HookToolUseData {
+  session_id: string;
+  tool_name: string;
+  tool_input?: Record<string, unknown>;
+  tool_result?: {
+    output?: string;
+    error?: string;
+  };
+}
+
+// Types for Claude Code settings.json
+interface ClaudeSettings {
+  hooks?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+// Type for package.json version field
+interface PackageJson {
+  version?: string;
+}
 
 // Read version from package.json
 function getVersion(): string {
   try {
     const pkgPath = path.join(__dirname, "..", "package.json");
-    const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8")) as PackageJson;
     return pkg.version || "0.0.0";
   } catch {
     return "0.0.0";
@@ -329,13 +370,13 @@ program
     }
 
     // Check for existing settings
-    let existingSettings: Record<string, unknown> = {};
+    let existingSettings: ClaudeSettings = {};
     let hasExistingHooks = false;
 
     if (fs.existsSync(settingsPath)) {
       try {
         const content = fs.readFileSync(settingsPath, "utf-8");
-        existingSettings = JSON.parse(content);
+        existingSettings = JSON.parse(content) as ClaudeSettings;
         hasExistingHooks = !!existingSettings.hooks;
         console.log("Found existing settings.json");
       } catch {
@@ -394,7 +435,7 @@ program
     if (fs.existsSync(settingsPath)) {
       try {
         const content = fs.readFileSync(settingsPath, "utf-8");
-        const settings = JSON.parse(content);
+        const settings = JSON.parse(content) as ClaudeSettings;
         hooksConfigured = !!settings.hooks?.SessionStart;
       } catch {
         // Ignore parse errors
@@ -433,6 +474,61 @@ program
   });
 
 // ============================================================================
+// Sync Test Command (test connectivity)
+// ============================================================================
+
+program
+  .command("synctest")
+  .description("Test connectivity and create a test session")
+  .action(async () => {
+    const config = loadConfig();
+
+    console.log("\n  Claude Code Sync - Connection Test\n");
+
+    if (!config) {
+      console.log("Not configured");
+      console.log("   Run 'claude-code-sync login' to set up\n");
+      process.exit(1);
+    }
+
+    console.log("Configuration:");
+    console.log(`  Convex URL: ${config.convexUrl}`);
+    console.log(`  API Key:    ${maskApiKey(config.apiKey)}`);
+
+    console.log("\nTesting connection...");
+    const client = new SyncClient(config);
+    const connected = await client.testConnection();
+
+    if (connected) {
+      console.log("Connection: OK");
+      
+      // Create a test session to verify full sync works
+      console.log("\nCreating test session...");
+      try {
+        const testSession = {
+          sessionId: `test-${Date.now()}`,
+          source: "claude-code" as const,
+          title: "Connection Test",
+          projectName: "synctest",
+          startedAt: new Date().toISOString(),
+          endedAt: new Date().toISOString(),
+        };
+        await client.syncSession(testSession);
+        console.log("Test session created successfully");
+        console.log("\nSync test passed. Ready to sync Claude Code sessions.\n");
+      } catch (error) {
+        console.log(`Test session failed: ${error}`);
+        console.log("\nConnection works but sync may have issues.\n");
+        process.exit(1);
+      }
+    } else {
+      console.log("Connection: FAILED");
+      console.log("\nCheck your Convex URL and API key.\n");
+      process.exit(1);
+    }
+  });
+
+// ============================================================================
 // Hook Command (for Claude Code integration)
 // ============================================================================
 
@@ -462,17 +558,17 @@ program
     }
 
     try {
-      const data = JSON.parse(input);
       const client = new SyncClient(config);
 
       switch (event) {
         case "SessionStart": {
-          const session = {
+          const data = JSON.parse(input) as HookSessionStartData;
+          const session: SessionData = {
             sessionId: data.session_id,
-            source: "claude-code" as const,
+            source: "claude-code",
             cwd: data.cwd,
             permissionMode: data.permission_mode,
-            startType: data.source === "startup" ? "new" : data.source,
+            startType: data.source === "startup" ? "new" : (data.source as SessionData["startType"]),
             startedAt: new Date().toISOString(),
             projectPath: data.cwd,
             projectName: data.cwd ? data.cwd.split("/").pop() : undefined,
@@ -482,9 +578,10 @@ program
         }
 
         case "SessionEnd": {
-          const session = {
+          const data = JSON.parse(input) as HookSessionEndData;
+          const session: SessionData = {
             sessionId: data.session_id,
-            source: "claude-code" as const,
+            source: "claude-code",
             endReason: data.reason,
             endedAt: new Date().toISOString(),
           };
@@ -493,11 +590,12 @@ program
         }
 
         case "UserPromptSubmit": {
-          const message = {
+          const data = JSON.parse(input) as HookUserPromptData;
+          const message: MessageData = {
             sessionId: data.session_id,
             messageId: `${data.session_id}-${Date.now()}`,
-            source: "claude-code" as const,
-            role: "user" as const,
+            source: "claude-code",
+            role: "user",
             content: data.prompt,
             timestamp: new Date().toISOString(),
           };
@@ -507,11 +605,12 @@ program
 
         case "PostToolUse": {
           if (!config.syncToolCalls) break;
-          const message = {
+          const data = JSON.parse(input) as HookToolUseData;
+          const message: MessageData = {
             sessionId: data.session_id,
             messageId: `${data.session_id}-tool-${Date.now()}`,
-            source: "claude-code" as const,
-            role: "assistant" as const,
+            source: "claude-code",
+            role: "assistant",
             toolName: data.tool_name,
             toolArgs: data.tool_input,
             toolResult: data.tool_result?.output || data.tool_result?.error,

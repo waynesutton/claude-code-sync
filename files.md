@@ -21,7 +21,7 @@ Brief description of each file in the codebase.
 | File | Description |
 |------|-------------|
 | `src/index.ts` | Plugin entry point, exports Config, SyncClient, and hook handlers |
-| `src/cli.ts` | CLI commands: login, logout, status, config, set, setup, verify, hook |
+| `src/cli.ts` | CLI commands: login, logout, status, config, set, setup, verify, synctest, hook |
 
 ## dist/ (generated)
 

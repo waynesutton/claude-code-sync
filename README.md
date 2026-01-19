@@ -3,11 +3,19 @@
 [![npm version](https://img.shields.io/npm/v/claude-code-sync.svg)](https://www.npmjs.com/package/claude-code-sync)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
-Sync your Claude Code sessions to [OpenSync](https://github.com/waynesutton/opensync) dashboard. Track coding sessions, analyze tool usage, and monitor token consumption across projects.
+Sync your Claude Code sessions to [OpenSync](https://opensync.dev/) dashboard. Track coding sessions, analyze tool usage, and monitor token consumption across projects.
 
 **GitHub:** [github.com/waynesutton/claude-code-sync](https://github.com/waynesutton/claude-code-sync)
 
 **npm:** [npmjs.com/package/claude-code-sync](https://www.npmjs.com/package/claude-code-sync)
+
+## OpenSync Ecosystem
+
+| Package | Description | Install |
+|---------|-------------|---------|
+| [OpenSync](https://opensync.dev/) | Beautiful dashboards for OpenCode and Claude Code sessions synced to the cloud | [GitHub](https://github.com/waynesutton/opensync) |
+| [opencode-sync-plugin](https://www.npmjs.com/package/opencode-sync-plugin) | Sync your OpenCode sessions to OpenSync dashboard | `npm install -g opencode-sync-plugin` |
+| [claude-code-sync](https://www.npmjs.com/package/claude-code-sync) | Sync your Claude Code sessions to OpenSync dashboard | `npm install -g claude-code-sync` |
 
 ## Installation
 
@@ -91,6 +99,7 @@ Sessions will now sync automatically when you use Claude Code.
 | `claude-code-sync login` | Configure Convex URL and API Key |
 | `claude-code-sync setup` | Add hooks to Claude Code settings |
 | `claude-code-sync verify` | Verify credentials and Claude Code config |
+| `claude-code-sync synctest` | Test connectivity and create a test session |
 | `claude-code-sync logout` | Clear stored credentials |
 | `claude-code-sync status` | Show connection status |
 | `claude-code-sync config` | Show current configuration |
@@ -193,11 +202,21 @@ If you run into issues or have questions:
 
 ## Links
 
-- [claude-code-sync Repository](https://github.com/waynesutton/claude-code-sync)
-- [Issues and Support](https://github.com/waynesutton/claude-code-sync/issues)
-- [OpenSync Backend](https://github.com/waynesutton/opensync)
-- [OpenSync Dashboard](https://opensyncsessions.netlify.app)
+### OpenSync
+
+- [OpenSync](https://opensync.dev/) - Beautiful dashboards for OpenCode and Claude Code sessions
+- [OpenSync Repository](https://github.com/waynesutton/opensync)
+
+### claude-code-sync (this package)
+
+- [GitHub Repository](https://github.com/waynesutton/claude-code-sync)
 - [npm Package](https://www.npmjs.com/package/claude-code-sync)
+- [Issues and Support](https://github.com/waynesutton/claude-code-sync/issues)
+
+### opencode-sync-plugin
+
+- [GitHub Repository](https://github.com/waynesutton/opencode-sync-plugin)
+- [npm Package](https://www.npmjs.com/package/opencode-sync-plugin)
 
 ## License
 
