@@ -186,6 +186,7 @@ claude-code-sync login
 ```
 
 See [troubleshooting guide](docs/commands.md#troubleshooting) for more solutions.
+See [docs](https://www.opensync.dev/docs)
 
 ### Need Help?
 
