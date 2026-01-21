@@ -14,6 +14,7 @@ import { Command } from "commander";
 import * as readline from "readline";
 import * as fs from "fs";
 import * as path from "path";
+import * as os from "os";
 import {
   loadConfig,
   saveConfig,
@@ -24,9 +25,173 @@ import {
   MessageData,
 } from "./index";
 
+// ============================================================================
+// Transcript Parsing (duplicated from index.ts for CLI use)
+// ============================================================================
+
+interface TranscriptEntry {
+  type: string;
+  message?: {
+    model?: string;
+    role?: string;
+    usage?: {
+      input_tokens?: number;
+      output_tokens?: number;
+      cache_creation_input_tokens?: number;
+      cache_read_input_tokens?: number;
+    };
+    content?: unknown;
+  };
+  sessionId?: string;
+  cwd?: string;
+  slug?: string;
+}
+
+interface TranscriptStats {
+  model: string | undefined;
+  inputTokens: number;
+  cacheCreationTokens: number;
+  cacheReadTokens: number;
+  outputTokens: number;
+  messageCount: number;
+  toolCallCount: number;
+  title: string | undefined;
+  cwd: string | undefined;
+  startedAt: string | undefined;
+  endedAt: string | undefined;
+  durationMs: number | undefined;
+}
+
+function parseTranscript(transcriptPath: string): TranscriptStats {
+  const stats: TranscriptStats = {
+    model: undefined,
+    inputTokens: 0,
+    cacheCreationTokens: 0,
+    cacheReadTokens: 0,
+    outputTokens: 0,
+    messageCount: 0,
+    toolCallCount: 0,
+    title: undefined,
+    cwd: undefined,
+    startedAt: undefined,
+    endedAt: undefined,
+    durationMs: undefined,
+  };
+
+  try {
+    if (!fs.existsSync(transcriptPath)) {
+      return stats;
+    }
+
+    const content = fs.readFileSync(transcriptPath, "utf-8");
+    const lines = content.trim().split("\n");
+    let firstTimestamp: string | undefined;
+    let lastTimestamp: string | undefined;
+
+    for (const line of lines) {
+      try {
+        const entry = JSON.parse(line) as TranscriptEntry & { timestamp?: string };
+
+        // Track timestamps for duration
+        if (entry.timestamp) {
+          if (!firstTimestamp) {
+            firstTimestamp = entry.timestamp;
+          }
+          lastTimestamp = entry.timestamp;
+        }
+
+        if (!stats.cwd && entry.cwd) {
+          stats.cwd = entry.cwd;
+        }
+        if (!stats.title && entry.slug) {
+          stats.title = entry.slug;
+        }
+
+        if (entry.type === "user") {
+          stats.messageCount++;
+        }
+
+        if (entry.type === "assistant" && entry.message) {
+          if (entry.message.model && !stats.model) {
+            stats.model = entry.message.model;
+          }
+
+          if (entry.message.usage) {
+            const usage = entry.message.usage;
+            // Track tokens separately for proper cost calculation
+            stats.inputTokens += usage.input_tokens || 0;
+            stats.cacheCreationTokens += usage.cache_creation_input_tokens || 0;
+            stats.cacheReadTokens += usage.cache_read_input_tokens || 0;
+            stats.outputTokens += usage.output_tokens || 0;
+          }
+        }
+
+        if (entry.type === "assistant" && entry.message?.content) {
+          const content = entry.message.content;
+          if (Array.isArray(content)) {
+            for (const part of content) {
+              if (part && typeof part === "object" && "type" in part && part.type === "tool_use") {
+                stats.toolCallCount++;
+              }
+            }
+          }
+        }
+      } catch {
+        // Skip malformed lines
+      }
+    }
+
+    // Calculate duration from timestamps
+    if (firstTimestamp && lastTimestamp) {
+      stats.startedAt = firstTimestamp;
+      stats.endedAt = lastTimestamp;
+      const startMs = new Date(firstTimestamp).getTime();
+      const endMs = new Date(lastTimestamp).getTime();
+      if (!isNaN(startMs) && !isNaN(endMs)) {
+        stats.durationMs = endMs - startMs;
+      }
+    }
+  } catch (error) {
+    console.error(`[claude-code-sync] Error parsing transcript: ${error}`);
+  }
+
+  return stats;
+}
+
+// Pricing per million tokens (USD) - includes cache pricing
+const MODEL_PRICING: Record<string, { input: number; output: number; cacheWrite: number; cacheRead: number }> = {
+  'claude-sonnet-4-20250514': { input: 3.00, output: 15.00, cacheWrite: 3.75, cacheRead: 0.30 },
+  'claude-opus-4-20250514': { input: 15.00, output: 75.00, cacheWrite: 18.75, cacheRead: 1.50 },
+  'claude-opus-4-5-20251101': { input: 15.00, output: 75.00, cacheWrite: 18.75, cacheRead: 1.50 },
+  'claude-3-5-sonnet-20241022': { input: 3.00, output: 15.00, cacheWrite: 3.75, cacheRead: 0.30 },
+  'claude-3-opus-20240229': { input: 15.00, output: 75.00, cacheWrite: 18.75, cacheRead: 1.50 },
+  'claude-3-5-haiku-20241022': { input: 0.80, output: 4.00, cacheWrite: 1.00, cacheRead: 0.08 },
+};
+
+function calculateCost(model: string | undefined, stats: TranscriptStats): number {
+  if (!model) return 0;
+  let pricing = MODEL_PRICING[model];
+  if (!pricing) {
+    const matchingKey = Object.keys(MODEL_PRICING).find(k => model.includes(k) || k.includes(model));
+    if (matchingKey) {
+      pricing = MODEL_PRICING[matchingKey];
+    }
+  }
+  if (!pricing) return 0;
+
+  // Calculate cost with proper cache pricing
+  const inputCost = stats.inputTokens * pricing.input;
+  const cacheWriteCost = stats.cacheCreationTokens * pricing.cacheWrite;
+  const cacheReadCost = stats.cacheReadTokens * pricing.cacheRead;
+  const outputCost = stats.outputTokens * pricing.output;
+
+  return (inputCost + cacheWriteCost + cacheReadCost + outputCost) / 1_000_000;
+}
+
 // Types for Claude Code hook event data from stdin
 interface HookSessionStartData {
   session_id: string;
+  transcript_path?: string;
   cwd?: string;
   permission_mode?: string;
   source?: string;
@@ -34,22 +199,31 @@ interface HookSessionStartData {
 
 interface HookSessionEndData {
   session_id: string;
-  reason?: "user_stop" | "max_turns" | "error" | "completed";
+  transcript_path?: string;
+  cwd?: string;
+  reason?: string;
 }
 
 interface HookUserPromptData {
   session_id: string;
+  transcript_path?: string;
   prompt: string;
 }
 
 interface HookToolUseData {
   session_id: string;
+  transcript_path?: string;
   tool_name: string;
   tool_input?: Record<string, unknown>;
   tool_result?: {
     output?: string;
     error?: string;
   };
+}
+
+interface HookStopData {
+  session_id: string;
+  transcript_path?: string;
 }
 
 // Types for Claude Code settings.json
@@ -564,28 +738,103 @@ program
       switch (event) {
         case "SessionStart": {
           const data = JSON.parse(input) as HookSessionStartData;
+
+          // Parse transcript if available to get initial info
+          let stats: TranscriptStats | undefined;
+          if (data.transcript_path && fs.existsSync(data.transcript_path)) {
+            stats = parseTranscript(data.transcript_path);
+          }
+
+          const cwd = stats?.cwd || data.cwd;
           const session: SessionData = {
             sessionId: data.session_id,
             source: "claude-code",
-            cwd: data.cwd,
+            cwd: cwd,
+            model: stats?.model,
+            title: stats?.title,
             permissionMode: data.permission_mode,
             startType: data.source === "startup" ? "new" : (data.source as SessionData["startType"]),
             startedAt: new Date().toISOString(),
-            projectPath: data.cwd,
-            projectName: data.cwd ? data.cwd.split("/").pop() : undefined,
+            projectPath: cwd,
+            projectName: cwd ? path.basename(cwd) : undefined,
           };
+
+          // Try to get git branch
+          if (cwd) {
+            try {
+              const gitDir = path.join(cwd, ".git");
+              if (fs.existsSync(gitDir)) {
+                const headFile = path.join(gitDir, "HEAD");
+                if (fs.existsSync(headFile)) {
+                  const head = fs.readFileSync(headFile, "utf-8").trim();
+                  if (head.startsWith("ref: refs/heads/")) {
+                    session.gitBranch = head.replace("ref: refs/heads/", "");
+                  }
+                }
+              }
+            } catch {
+              // Ignore git errors
+            }
+          }
+
           await client.syncSession(session);
           break;
         }
 
         case "SessionEnd": {
           const data = JSON.parse(input) as HookSessionEndData;
+
+          // Parse transcript to get model, tokens, and stats
+          let stats: TranscriptStats = {
+            model: undefined,
+            inputTokens: 0,
+            cacheCreationTokens: 0,
+            cacheReadTokens: 0,
+            outputTokens: 0,
+            messageCount: 0,
+            toolCallCount: 0,
+            title: undefined,
+            cwd: data.cwd,
+            startedAt: undefined,
+            endedAt: undefined,
+            durationMs: undefined,
+          };
+
+          if (data.transcript_path && fs.existsSync(data.transcript_path)) {
+            stats = parseTranscript(data.transcript_path);
+            console.error(`[claude-code-sync] Parsed transcript: model=${stats.model}, tokens=${stats.inputTokens}/${stats.outputTokens}`);
+          }
+
+          // Calculate cost from tokens (with proper cache pricing)
+          let cost: number | undefined;
+          if (stats.model && (stats.inputTokens || stats.outputTokens || stats.cacheReadTokens)) {
+            cost = calculateCost(stats.model, stats);
+          }
+
+          const cwd = stats.cwd || data.cwd;
+          const totalInputTokens = stats.inputTokens + stats.cacheCreationTokens + stats.cacheReadTokens;
           const session: SessionData = {
             sessionId: data.session_id,
             source: "claude-code",
+            model: stats.model,
+            title: stats.title,
+            cwd: cwd,
+            projectPath: cwd,
+            projectName: cwd ? path.basename(cwd) : undefined,
             endReason: data.reason,
-            endedAt: new Date().toISOString(),
+            messageCount: stats.messageCount,
+            toolCallCount: stats.toolCallCount,
+            tokenUsage: {
+              input: totalInputTokens,
+              output: stats.outputTokens,
+            },
+            costEstimate: cost,
+            startedAt: stats.startedAt,
+            endedAt: stats.endedAt || new Date().toISOString(),
           };
+
+          const durationMin = stats.durationMs ? Math.round(stats.durationMs / 60000) : 0;
+          console.error(`[claude-code-sync] SessionEnd: model=${session.model}, cost=$${cost?.toFixed(4) || 0}, tokens=${totalInputTokens}in/${stats.outputTokens}out, duration=${durationMin}min`);
           await client.syncSession(session);
           break;
         }
@@ -622,8 +871,53 @@ program
         }
 
         case "Stop": {
-          // Stop event indicates Claude finished responding
-          // We could track this but for now just acknowledge
+          // Stop event indicates Claude finished responding - sync the latest assistant message
+          const data = JSON.parse(input) as HookStopData;
+
+          if (data.transcript_path && fs.existsSync(data.transcript_path)) {
+            // Read transcript to get the latest assistant message
+            const content = fs.readFileSync(data.transcript_path, "utf-8");
+            const lines = content.trim().split("\n");
+
+            // Find the last assistant message with text content
+            let lastAssistantText = "";
+            let lastModel = "";
+
+            for (let i = lines.length - 1; i >= 0; i--) {
+              try {
+                const entry = JSON.parse(lines[i]);
+                if (entry.type === "assistant" && entry.message) {
+                  if (entry.message.model) {
+                    lastModel = entry.message.model;
+                  }
+                  // Look for text content in the message
+                  if (entry.message.content && Array.isArray(entry.message.content)) {
+                    for (const part of entry.message.content) {
+                      if (part && part.type === "text" && part.text) {
+                        lastAssistantText = part.text;
+                        break;
+                      }
+                    }
+                  }
+                  if (lastAssistantText) break;
+                }
+              } catch {
+                // Skip malformed lines
+              }
+            }
+
+            if (lastAssistantText) {
+              const message: MessageData = {
+                sessionId: data.session_id,
+                messageId: `${data.session_id}-assistant-${Date.now()}`,
+                source: "claude-code",
+                role: "assistant",
+                content: lastAssistantText,
+                timestamp: new Date().toISOString(),
+              };
+              await client.syncMessage(message);
+            }
+          }
           break;
         }
 

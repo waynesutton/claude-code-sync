@@ -35,7 +35,7 @@ export interface SessionData {
   gitRepo?: string;
   model?: string;
   startType?: "new" | "resume" | "continue";
-  endReason?: "user_stop" | "max_turns" | "error" | "completed";
+  endReason?: "user_stop" | "max_turns" | "error" | "completed" | "clear" | "logout" | "prompt_input_exit" | "other" | string;
   thinkingEnabled?: boolean;
   permissionMode?: string;
   mcpServers?: string[];
@@ -75,7 +75,7 @@ export interface ToolUseData {
   timestamp?: string;
 }
 
-// Claude Code Hook Types
+// Claude Code Hook Types (actual event structure from Claude Code)
 export interface ClaudeCodeHooks {
   SessionStart?: (data: SessionStartEvent) => void | Promise<void>;
   UserPromptSubmit?: (data: UserPromptEvent) => void | Promise<void>;
@@ -84,51 +84,220 @@ export interface ClaudeCodeHooks {
   SessionEnd?: (data: SessionEndEvent) => void | Promise<void>;
 }
 
+// Actual Claude Code hook event interfaces (from documentation)
 export interface SessionStartEvent {
-  sessionId: string;
-  cwd: string;
-  model: string;
-  startType: "new" | "resume" | "continue";
-  thinkingEnabled?: boolean;
-  permissionMode?: string;
-  mcpServers?: string[];
+  session_id: string;
+  transcript_path: string;
+  permission_mode: string;
+  hook_event_name: "SessionStart";
+  source: "startup" | "resume" | "clear" | "compact";
+  // Legacy fields (may or may not be provided)
+  sessionId?: string;
+  cwd?: string;
+  model?: string;
 }
 
 export interface UserPromptEvent {
-  sessionId: string;
-  prompt: string;
-  timestamp: string;
+  session_id: string;
+  transcript_path: string;
+  permission_mode: string;
+  hook_event_name: "UserPromptSubmit";
+  prompt?: string;
+  // Legacy fields
+  sessionId?: string;
+  timestamp?: string;
 }
 
 export interface ToolUseEvent {
-  sessionId: string;
-  toolName: string;
-  args: Record<string, unknown>;
-  result: string;
-  success: boolean;
-  durationMs: number;
+  session_id: string;
+  transcript_path: string;
+  tool_name: string;
+  permission_mode: string;
+  hook_event_name: "PostToolUse";
+  // Legacy fields
+  sessionId?: string;
+  toolName?: string;
+  args?: Record<string, unknown>;
+  result?: string;
+  success?: boolean;
+  durationMs?: number;
 }
 
 export interface StopEvent {
-  sessionId: string;
-  response: string;
-  tokenUsage: {
-    input: number;
-    output: number;
-  };
-  durationMs: number;
+  session_id: string;
+  transcript_path: string;
+  permission_mode: string;
+  hook_event_name: "Stop";
+  stop_hook_active: boolean;
+  // Legacy fields
+  sessionId?: string;
+  response?: string;
+  tokenUsage?: { input: number; output: number };
+  durationMs?: number;
+  model?: string;
 }
 
 export interface SessionEndEvent {
-  sessionId: string;
-  endReason: "user_stop" | "max_turns" | "error" | "completed";
+  session_id: string;
+  transcript_path: string;
+  cwd: string;
+  permission_mode: string;
+  hook_event_name: "SessionEnd";
+  reason: "clear" | "logout" | "prompt_input_exit" | "other";
+  // Legacy fields
+  sessionId?: string;
+  endReason?: string;
+  messageCount?: number;
+  toolCallCount?: number;
+  totalTokenUsage?: { input: number; output: number };
+  costEstimate?: number;
+}
+
+// Transcript entry types for parsing
+interface TranscriptEntry {
+  type: string;
+  message?: {
+    model?: string;
+    role?: string;
+    usage?: {
+      input_tokens?: number;
+      output_tokens?: number;
+      cache_creation_input_tokens?: number;
+      cache_read_input_tokens?: number;
+    };
+    content?: unknown;
+  };
+  sessionId?: string;
+  cwd?: string;
+  slug?: string;
+}
+
+interface TranscriptStats {
+  model: string | undefined;
+  inputTokens: number;
+  outputTokens: number;
   messageCount: number;
   toolCallCount: number;
-  totalTokenUsage: {
-    input: number;
-    output: number;
+  title: string | undefined;
+  cwd: string | undefined;
+}
+
+/**
+ * Parse transcript file to extract model, token usage, and stats
+ */
+function parseTranscript(transcriptPath: string): TranscriptStats {
+  const stats: TranscriptStats = {
+    model: undefined,
+    inputTokens: 0,
+    outputTokens: 0,
+    messageCount: 0,
+    toolCallCount: 0,
+    title: undefined,
+    cwd: undefined,
   };
-  costEstimate: number;
+
+  try {
+    if (!fs.existsSync(transcriptPath)) {
+      return stats;
+    }
+
+    const content = fs.readFileSync(transcriptPath, "utf-8");
+    const lines = content.trim().split("\n");
+
+    for (const line of lines) {
+      try {
+        const entry: TranscriptEntry = JSON.parse(line);
+
+        // Get cwd and title from first entry that has them
+        if (!stats.cwd && entry.cwd) {
+          stats.cwd = entry.cwd;
+        }
+        if (!stats.title && entry.slug) {
+          stats.title = entry.slug;
+        }
+
+        // Count messages
+        if (entry.type === "user") {
+          stats.messageCount++;
+        }
+
+        // Extract model and tokens from assistant messages
+        if (entry.type === "assistant" && entry.message) {
+          if (entry.message.model && !stats.model) {
+            stats.model = entry.message.model;
+          }
+
+          if (entry.message.usage) {
+            const usage = entry.message.usage;
+            // Sum up all input token types
+            stats.inputTokens += usage.input_tokens || 0;
+            stats.inputTokens += usage.cache_creation_input_tokens || 0;
+            stats.inputTokens += usage.cache_read_input_tokens || 0;
+            // Output tokens
+            stats.outputTokens += usage.output_tokens || 0;
+          }
+        }
+
+        // Count tool uses
+        if (entry.type === "assistant" && entry.message?.content) {
+          const content = entry.message.content;
+          if (Array.isArray(content)) {
+            for (const part of content) {
+              if (part && typeof part === "object" && "type" in part && part.type === "tool_use") {
+                stats.toolCallCount++;
+              }
+            }
+          }
+        }
+      } catch {
+        // Skip malformed lines
+      }
+    }
+  } catch (error) {
+    console.error("[claude-code-sync] Error parsing transcript:", error);
+  }
+
+  return stats;
+}
+
+// ============================================================================
+// Model Pricing & Cost Calculation
+// ============================================================================
+
+/**
+ * Pricing per million tokens (USD)
+ * Source: https://www.anthropic.com/pricing
+ */
+const MODEL_PRICING: Record<string, { input: number; output: number }> = {
+  'claude-sonnet-4-20250514': { input: 3.00, output: 15.00 },
+  'claude-opus-4-20250514': { input: 15.00, output: 75.00 },
+  'claude-opus-4-5-20251101': { input: 15.00, output: 75.00 },
+  'claude-3-5-sonnet-20241022': { input: 3.00, output: 15.00 },
+  'claude-3-opus-20240229': { input: 15.00, output: 75.00 },
+  'claude-3-5-haiku-20241022': { input: 0.80, output: 4.00 },
+};
+
+/**
+ * Calculate cost from model and token usage
+ * Returns 0 if model is unknown or pricing not available
+ */
+function calculateCost(model: string | undefined, inputTokens: number, outputTokens: number): number {
+  if (!model) return 0;
+
+  // Try exact match first
+  let pricing = MODEL_PRICING[model];
+
+  // Try partial match if exact match fails
+  if (!pricing) {
+    const matchingKey = Object.keys(MODEL_PRICING).find(k => model.includes(k) || k.includes(model));
+    if (matchingKey) {
+      pricing = MODEL_PRICING[matchingKey];
+    }
+  }
+
+  if (!pricing) return 0;
+
+  return (inputTokens * pricing.input + outputTokens * pricing.output) / 1_000_000;
 }
 
 // ============================================================================
@@ -379,41 +548,63 @@ export function createPlugin(): ClaudeCodeHooks | null {
       messageCounter = 0;
       toolCallCounter = 0;
 
+      // Use session_id (new) or sessionId (legacy)
+      const sessionId = event.session_id || event.sessionId || "";
+      const transcriptPath = event.transcript_path || "";
+
+      console.log(`[claude-code-sync] SessionStart: session=${sessionId}, transcript=${transcriptPath}`);
+
       const session: SessionData = {
-        sessionId: event.sessionId,
+        sessionId,
         source: "claude-code",
-        cwd: event.cwd,
-        model: event.model,
-        startType: event.startType,
-        thinkingEnabled: event.thinkingEnabled,
-        permissionMode: event.permissionMode,
-        mcpServers: event.mcpServers,
+        permissionMode: event.permission_mode,
         startedAt: new Date().toISOString(),
       };
 
-      // Extract project info from cwd
-      if (event.cwd) {
-        session.projectPath = event.cwd;
-        session.projectName = path.basename(event.cwd);
+      // Store transcript path for later parsing
+      if (transcriptPath) {
+        client.updateSessionState(sessionId, {
+          ...session,
+          // Store transcript path in a way we can retrieve it
+          projectPath: transcriptPath,  // Temporarily store here
+        });
+      }
+
+      // Try to get cwd from transcript if available
+      if (transcriptPath && fs.existsSync(transcriptPath)) {
+        const stats = parseTranscript(transcriptPath);
+        if (stats.cwd) {
+          session.cwd = stats.cwd;
+          session.projectPath = stats.cwd;
+          session.projectName = path.basename(stats.cwd);
+        }
+        if (stats.title) {
+          session.title = stats.title;
+        }
+        if (stats.model) {
+          session.model = stats.model;
+        }
 
         // Try to get git info
-        try {
-          const gitDir = path.join(event.cwd, ".git");
-          if (fs.existsSync(gitDir)) {
-            const headFile = path.join(gitDir, "HEAD");
-            if (fs.existsSync(headFile)) {
-              const head = fs.readFileSync(headFile, "utf-8").trim();
-              if (head.startsWith("ref: refs/heads/")) {
-                session.gitBranch = head.replace("ref: refs/heads/", "");
+        if (stats.cwd) {
+          try {
+            const gitDir = path.join(stats.cwd, ".git");
+            if (fs.existsSync(gitDir)) {
+              const headFile = path.join(gitDir, "HEAD");
+              if (fs.existsSync(headFile)) {
+                const head = fs.readFileSync(headFile, "utf-8").trim();
+                if (head.startsWith("ref: refs/heads/")) {
+                  session.gitBranch = head.replace("ref: refs/heads/", "");
+                }
               }
             }
+          } catch {
+            // Ignore git errors
           }
-        } catch {
-          // Ignore git errors
         }
       }
 
-      client.updateSessionState(event.sessionId, session);
+      client.updateSessionState(sessionId, session);
       await client.syncSession(session);
     },
 
@@ -422,10 +613,11 @@ export function createPlugin(): ClaudeCodeHooks | null {
      */
     UserPromptSubmit: async (event: UserPromptEvent) => {
       messageCounter++;
+      const sessionId = event.session_id || event.sessionId || "";
 
       const message: MessageData = {
-        sessionId: event.sessionId,
-        messageId: `${event.sessionId}-msg-${messageCounter}`,
+        sessionId,
+        messageId: `${sessionId}-msg-${messageCounter}`,
         source: "claude-code",
         role: "user",
         content: event.prompt,
@@ -443,13 +635,15 @@ export function createPlugin(): ClaudeCodeHooks | null {
 
       toolCallCounter++;
       messageCounter++;
+      const sessionId = event.session_id || event.sessionId || "";
+      const toolName = event.tool_name || event.toolName || "unknown";
 
       const message: MessageData = {
-        sessionId: event.sessionId,
-        messageId: `${event.sessionId}-tool-${toolCallCounter}`,
+        sessionId,
+        messageId: `${sessionId}-tool-${toolCallCounter}`,
         source: "claude-code",
         role: "assistant",
-        toolName: event.toolName,
+        toolName,
         toolArgs: event.args,
         toolResult: event.result,
         durationMs: event.durationMs,
@@ -463,56 +657,90 @@ export function createPlugin(): ClaudeCodeHooks | null {
      * Called when Claude stops responding
      */
     Stop: async (event: StopEvent) => {
-      messageCounter++;
+      const sessionId = event.session_id || event.sessionId || "";
+      const transcriptPath = event.transcript_path || "";
 
-      const message: MessageData = {
-        sessionId: event.sessionId,
-        messageId: `${event.sessionId}-msg-${messageCounter}`,
-        source: "claude-code",
-        role: "assistant",
-        content: event.response,
-        tokenCount: event.tokenUsage.input + event.tokenUsage.output,
-        durationMs: event.durationMs,
-        timestamp: new Date().toISOString(),
-      };
+      // Parse transcript to get latest model and token info
+      if (transcriptPath && fs.existsSync(transcriptPath)) {
+        const stats = parseTranscript(transcriptPath);
+        const currentState = client.getSessionState(sessionId);
 
-      // Update session state with token usage
-      const currentState = client.getSessionState(event.sessionId);
-      const currentTokens = currentState.tokenUsage || { input: 0, output: 0 };
-      client.updateSessionState(event.sessionId, {
-        tokenUsage: {
-          input: currentTokens.input + event.tokenUsage.input,
-          output: currentTokens.output + event.tokenUsage.output,
-        },
-      });
+        const updates: Partial<SessionData> = {
+          tokenUsage: {
+            input: stats.inputTokens,
+            output: stats.outputTokens,
+          },
+        };
 
-      await client.syncMessage(message);
+        if (stats.model && !currentState.model) {
+          updates.model = stats.model;
+        }
+        if (stats.title && !currentState.title) {
+          updates.title = stats.title;
+        }
+
+        client.updateSessionState(sessionId, updates);
+        console.log(`[claude-code-sync] Stop: model=${stats.model}, tokens=${stats.inputTokens}/${stats.outputTokens}`);
+      }
     },
 
     /**
      * Called when session ends
      */
     SessionEnd: async (event: SessionEndEvent) => {
-      const currentState = client.getSessionState(event.sessionId);
+      const sessionId = event.session_id || event.sessionId || "";
+      const transcriptPath = event.transcript_path || "";
+      const currentState = client.getSessionState(sessionId);
+
+      // Parse transcript to get final stats
+      let stats: TranscriptStats = {
+        model: currentState.model,
+        inputTokens: currentState.tokenUsage?.input || 0,
+        outputTokens: currentState.tokenUsage?.output || 0,
+        messageCount: event.messageCount || 0,
+        toolCallCount: event.toolCallCount || 0,
+        title: currentState.title,
+        cwd: currentState.cwd,
+      };
+
+      if (transcriptPath && fs.existsSync(transcriptPath)) {
+        stats = parseTranscript(transcriptPath);
+      }
+
+      // Calculate cost from token usage
+      let cost = event.costEstimate;
+      if (cost === undefined || cost === null || cost === 0) {
+        if (stats.model && (stats.inputTokens || stats.outputTokens)) {
+          cost = calculateCost(stats.model, stats.inputTokens, stats.outputTokens);
+        }
+      }
 
       const session: SessionData = {
         ...currentState,
-        sessionId: event.sessionId,
+        sessionId,
         source: "claude-code",
-        endReason: event.endReason,
-        messageCount: event.messageCount,
-        toolCallCount: event.toolCallCount,
-        tokenUsage: event.totalTokenUsage,
-        costEstimate: event.costEstimate,
+        model: stats.model,
+        title: stats.title,
+        cwd: stats.cwd || event.cwd,
+        projectPath: stats.cwd || event.cwd,
+        projectName: stats.cwd ? path.basename(stats.cwd) : undefined,
+        endReason: event.reason || event.endReason,
+        messageCount: stats.messageCount,
+        toolCallCount: stats.toolCallCount,
+        tokenUsage: {
+          input: stats.inputTokens,
+          output: stats.outputTokens,
+        },
+        costEstimate: cost,
         endedAt: new Date().toISOString(),
       };
 
-      await client.syncSession(session);
-      client.clearSessionState(event.sessionId);
+      console.log(`[claude-code-sync] SessionEnd: model=${session.model}, cost=$${cost?.toFixed(4)}, tokens=${stats.inputTokens}/${stats.outputTokens}`);
 
-      console.log(
-        `[claude-code-sync] Session synced: ${event.messageCount} messages, ${event.toolCallCount} tool calls`
-      );
+      await client.syncSession(session);
+      client.clearSessionState(sessionId);
+
+      console.log(`[claude-code-sync] Session synced: ${stats.messageCount} messages, ${stats.toolCallCount} tool calls`);
     },
   };
 }
