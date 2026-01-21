@@ -50,6 +50,11 @@ export interface SessionData {
   endedAt?: string;
 }
 
+export interface MessagePart {
+  type: "text" | "tool-call" | "tool-result";
+  content: unknown;
+}
+
 export interface MessageData {
   sessionId: string;
   messageId: string;
@@ -60,6 +65,7 @@ export interface MessageData {
   toolName?: string;
   toolArgs?: Record<string, unknown>;
   toolResult?: string;
+  parts?: MessagePart[];
   durationMs?: number;
   tokenCount?: number;
   timestamp?: string;
@@ -420,27 +426,30 @@ export class SyncClient {
 
   // Transform message data to backend format
   private transformMessage(message: MessageData): Record<string, unknown> {
+    // Build parts array
+    let parts: MessagePart[] | undefined;
+
+    // Use explicit parts if provided
+    if (message.parts && message.parts.length > 0) {
+      parts = message.parts;
+    }
+    // Build parts from tool fields for backwards compatibility
+    else if (message.toolName) {
+      parts = [
+        { type: "tool-call", content: { name: message.toolName, args: message.toolArgs } },
+        { type: "tool-result", content: { result: message.toolResult } },
+      ];
+    }
+
     return {
       sessionExternalId: message.sessionId,
       externalId: message.messageId,
       role: message.role,
-      textContent: message.content || message.toolResult,
+      textContent: message.content,
       model: undefined,
       durationMs: message.durationMs,
       source: message.source,
-      // Tool use info stored in parts
-      parts: message.toolName
-        ? [
-            {
-              type: "tool_use",
-              content: {
-                toolName: message.toolName,
-                args: message.toolArgs,
-                result: message.toolResult,
-              },
-            },
-          ]
-        : undefined,
+      parts,
     };
   }
 
