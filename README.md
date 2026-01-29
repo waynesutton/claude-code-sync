@@ -11,11 +11,14 @@ Sync your Claude Code sessions to [OpenSync](https://opensync.dev/) dashboard. T
 
 ## OpenSync Ecosystem
 
-| Package | Description | Install |
-|---------|-------------|---------|
-| [OpenSync](https://opensync.dev/) | Beautiful dashboards for OpenCode and Claude Code sessions synced to the cloud | [GitHub](https://github.com/waynesutton/opensync) |
-| [opencode-sync-plugin](https://www.npmjs.com/package/opencode-sync-plugin) | Sync your OpenCode sessions to OpenSync dashboard | `npm install -g opencode-sync-plugin` |
-| [claude-code-sync](https://www.npmjs.com/package/claude-code-sync) | Sync your Claude Code sessions to OpenSync dashboard | `npm install -g claude-code-sync` |
+| Project                | Description                                   | Links                                                                                                                         |
+| ---------------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| OpenSync               | Dashboards for AI coding sessions             | [Website](https://www.opensync.dev/) / [GitHub](https://github.com/waynesutton/opensync)                                      |
+| opencode-sync-plugin   | Sync OpenCode sessions                        | [GitHub](https://github.com/waynesutton/opencode-sync-plugin) / [npm](https://www.npmjs.com/package/opencode-sync-plugin)     |
+| claude-code-sync       | Sync Claude Code sessions                     | [GitHub](https://github.com/waynesutton/claude-code-sync) / [npm](https://www.npmjs.com/package/claude-code-sync)             |
+| droid-sync             | Sync Factory Droid sessions (community built) | [GitHub](https://github.com/yemyat/droid-sync-plugin) / [npm](https://www.npmjs.com/package/droid-sync)                       |
+| codex-sync             | Sync Codex CLI sessions                       | [GitHub](https://github.com/waynesutton/codex-sync-plugin) / [npm](https://www.npmjs.com/package/codex-sync)                  |
+| cursor-opensync-plugin | Sync Cursor sessions                          | [GitHub](https://github.com/waynesutton/cursor-cli-sync-plugin) / [npm](https://www.npmjs.com/package/cursor-opensync-plugin) |
 
 ## Installation
 
@@ -39,8 +42,14 @@ claude-code-sync login
 ```
 
 Enter when prompted:
+
 - **Convex URL**: Your deployment URL (e.g., `https://your-project.convex.cloud`)
 - **API Key**: Your API key from Settings (e.g., `osk_abc123...`)
+
+**Where to find these values:**
+
+- **Cloud (opensync.dev)**: Create an account at [opensync.dev](https://opensync.dev), go to **Settings** > **API Access** > **Plugin Setup** to find your Convex URL and create an API key
+- **Self-hosted**: Use the same process on your own OpenSync deployment
 
 ### 3. Add to Claude Code
 
@@ -120,20 +129,20 @@ claude-code-sync synctest
 
 ## CLI Commands
 
-| Command | Description |
-|---------|-------------|
-| `claude-code-sync login` | Configure Convex URL and API Key |
-| `claude-code-sync setup` | Add hooks to Claude Code settings |
-| `claude-code-sync verify` | Verify credentials and Claude Code config |
-| `claude-code-sync synctest` | Test connectivity and create a test session |
-| `claude-code-sync logout` | Clear stored credentials |
-| `claude-code-sync status` | Show connection status |
-| `claude-code-sync config` | Show current configuration |
-| `claude-code-sync config --json` | Show config as JSON |
-| `claude-code-sync set <key> <value>` | Update a config value |
-| `claude-code-sync hook <event>` | Handle Claude Code hook events (internal) |
-| `claude-code-sync --version` | Show version number |
-| `claude-code-sync --help` | Show help |
+| Command                              | Description                                 |
+| ------------------------------------ | ------------------------------------------- |
+| `claude-code-sync login`             | Configure Convex URL and API Key            |
+| `claude-code-sync setup`             | Add hooks to Claude Code settings           |
+| `claude-code-sync verify`            | Verify credentials and Claude Code config   |
+| `claude-code-sync synctest`          | Test connectivity and create a test session |
+| `claude-code-sync logout`            | Clear stored credentials                    |
+| `claude-code-sync status`            | Show connection status                      |
+| `claude-code-sync config`            | Show current configuration                  |
+| `claude-code-sync config --json`     | Show config as JSON                         |
+| `claude-code-sync set <key> <value>` | Update a config value                       |
+| `claude-code-sync hook <event>`      | Handle Claude Code hook events (internal)   |
+| `claude-code-sync --version`         | Show version number                         |
+| `claude-code-sync --help`            | Show help                                   |
 
 See [full command reference](docs/commands.md) for detailed usage, troubleshooting, and examples.
 
@@ -141,21 +150,21 @@ See [full command reference](docs/commands.md) for detailed usage, troubleshooti
 
 The plugin captures these Claude Code events:
 
-| Event | Description |
-|-------|-------------|
-| `SessionStart` | Fires when a coding session begins |
-| `SessionEnd` | Fires when a session terminates |
-| `UserPromptSubmit` | Fires when you submit a prompt |
-| `PostToolUse` | Fires after each tool execution |
-| `Stop` | Fires when Claude finishes responding |
+| Event              | Description                           |
+| ------------------ | ------------------------------------- |
+| `SessionStart`     | Fires when a coding session begins    |
+| `SessionEnd`       | Fires when a session terminates       |
+| `UserPromptSubmit` | Fires when you submit a prompt        |
+| `PostToolUse`      | Fires after each tool execution       |
+| `Stop`             | Fires when Claude finishes responding |
 
 ### Configuration Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `autoSync` | boolean | `true` | Automatically sync sessions |
-| `syncToolCalls` | boolean | `true` | Include tool call details |
-| `syncThinking` | boolean | `false` | Include thinking traces |
+| Option          | Type    | Default | Description                 |
+| --------------- | ------- | ------- | --------------------------- |
+| `autoSync`      | boolean | `true`  | Automatically sync sessions |
+| `syncToolCalls` | boolean | `true`  | Include tool call details   |
+| `syncThinking`  | boolean | `false` | Include thinking traces     |
 
 Set options with:
 
@@ -177,15 +186,15 @@ export CLAUDE_SYNC_THINKING="false"
 
 ## What Gets Synced
 
-| Data | Description |
-|------|-------------|
-| Session metadata | Project path, working directory, git branch, timestamps |
-| User prompts | Your messages to Claude |
-| Assistant responses | Claude's responses |
-| Tool calls | Which tools were used and their outcomes |
-| Token usage | Input and output token counts |
-| Model info | Which Claude model was used |
-| Cost estimate | Estimated session cost |
+| Data                | Description                                             |
+| ------------------- | ------------------------------------------------------- |
+| Session metadata    | Project path, working directory, git branch, timestamps |
+| User prompts        | Your messages to Claude                                 |
+| Assistant responses | Claude's responses                                      |
+| Tool calls          | Which tools were used and their outcomes                |
+| Token usage         | Input and output token counts                           |
+| Model info          | Which Claude model was used                             |
+| Cost estimate       | Estimated session cost                                  |
 
 ## Privacy
 
