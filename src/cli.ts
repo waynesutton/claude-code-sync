@@ -14,6 +14,7 @@ import { Command } from "commander";
 import * as readline from "readline";
 import * as fs from "fs";
 import * as path from "path";
+import * as os from "os";
 import {
   loadConfig,
   saveConfig,
@@ -466,7 +467,7 @@ program
   .description("Add hooks to Claude Code settings (configures ~/.claude/settings.json)")
   .option("--force", "Overwrite existing hooks configuration")
   .action(async (options: { force?: boolean }) => {
-    const claudeDir = path.join(process.env.HOME || "~", ".claude");
+    const claudeDir = path.join(os.homedir(), ".claude");
     const settingsPath = path.join(claudeDir, "settings.json");
 
     console.log("\n  Claude Code Sync - Setup\n");
@@ -544,7 +545,7 @@ program
     }
 
     // Check Claude Code config
-    const settingsPath = path.join(process.env.HOME || "~", ".claude", "settings.json");
+    const settingsPath = path.join(os.homedir(), ".claude", "settings.json");
     let hooksConfigured = false;
 
     if (fs.existsSync(settingsPath)) {
@@ -649,7 +650,7 @@ program
 
 // Track session state for title generation (first user prompt)
 const SESSION_STATE_FILE = path.join(
-  process.env.HOME || "~",
+  os.homedir(),
   ".config",
   "claude-code-sync",
   "session-state.json"
